@@ -145,7 +145,7 @@ class RPN(nn.Module):
         pred_objectness_logits, pred_anchor_deltas = self.rpn_head(features)
         anchors = self.anchor_generator(features)
         # TODO: The anchors only depend on the feature map shape; there's probably
-        # an opportunity for some optimizations (e.g., caching anchors).
+        #  an opportunity for some optimizations (e.g., caching anchors).
         outputs = RPNOutputs(
             self.box2box_transform,
             self.anchor_matcher,

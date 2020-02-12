@@ -73,6 +73,8 @@ class BottleneckBlock(ResNetBlockBase):
         """
         super().__init__(in_channels, out_channels, stride)
 
+        # stage 的第一个 block 的 in_channels != out_channels, 也称为 conv_block
+        # 后面的 block 的 in_channels == out_channels, 称为 identity_block
         if in_channels != out_channels:
             self.shortcut = Conv2d(
                 in_channels,
@@ -415,6 +417,7 @@ def build_resnet_backbone(cfg, input_shape):
     norm = cfg.MODEL.RESNETS.NORM
     stem = BasicStem(
         in_channels=input_shape.channels,
+        # resnet50(64)
         out_channels=cfg.MODEL.RESNETS.STEM_OUT_CHANNELS,
         norm=norm,
     )
@@ -451,6 +454,7 @@ def build_resnet_backbone(cfg, input_shape):
     max_stage_idx = max(out_stage_idx)
     for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
         dilation = res5_dilation if stage_idx == 5 else 1
+        # stage2 的 stride 是 1, stage3,4,5 的 stride 都是 2
         first_stride = 1 if idx == 0 or (stage_idx == 5 and dilation == 2) else 2
         stage_kargs = {
             "num_blocks": num_blocks_per_stage[idx],

@@ -42,14 +42,16 @@ class BufferList(nn.Module):
 
 def _create_grid_offsets(size, stride, offset, device):
     grid_height, grid_width = size
+    # grid 的每个像素对应原图像的 offset
     shifts_x = torch.arange(
         offset * stride, grid_width * stride, step=stride, dtype=torch.float32, device=device
     )
     shifts_y = torch.arange(
         offset * stride, grid_height * stride, step=stride, dtype=torch.float32, device=device
     )
-
+    # (grid_height, grid_width), (grid_height, grid_width)
     shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
+    # (grid_height * grid_width, )
     shift_x = shift_x.reshape(-1)
     shift_y = shift_y.reshape(-1)
     return shift_x, shift_y
@@ -64,9 +66,13 @@ class DefaultAnchorGenerator(nn.Module):
     def __init__(self, cfg, input_shape: List[ShapeSpec]):
         super().__init__()
         # fmt: off
+        # [[32], [64], [128], [256], [512]]
         sizes         = cfg.MODEL.ANCHOR_GENERATOR.SIZES
+        # [[0.5, 1.0, 2.0]]
         aspect_ratios = cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS
+        # [4, 8, 16, 32, 64]
         self.strides  = [x.stride for x in input_shape]
+        # 0.0
         self.offset   = cfg.MODEL.ANCHOR_GENERATOR.OFFSET
 
         assert 0.0 <= self.offset < 1.0, self.offset
@@ -132,9 +138,10 @@ class DefaultAnchorGenerator(nn.Module):
         for size, stride, base_anchors in zip(grid_sizes, self.strides, self.cell_anchors):
             shift_x, shift_y = _create_grid_offsets(size, stride, self.offset, base_anchors.device)
             shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1)
-
+            # (grid_height * grid_width, 1, 4) + (1, len(aspect_ratios), 4)
+            # --> (grid_height * grid_width * len(aspect_ratios, 4)
             anchors.append((shifts.view(-1, 1, 4) + base_anchors.view(1, -1, 4)).reshape(-1, 4))
-
+        # [(grid_height * grid_width) * len(aspect_ratios), 4), ... ,]
         return anchors
 
     def generate_cell_anchors(self, sizes=(32, 64, 128, 256, 512), aspect_ratios=(0.5, 1, 2)):
@@ -174,6 +181,7 @@ class DefaultAnchorGenerator(nn.Module):
                 h = aspect_ratio * w
                 x0, y0, x1, y1 = -w / 2.0, -h / 2.0, w / 2.0, h / 2.0
                 anchors.append([x0, y0, x1, y1])
+        # (len(sizes) * len(aspect_ratios), 4), 以原点都中心点的 anchors
         return torch.tensor(anchors)
 
     def forward(self, features):

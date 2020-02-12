@@ -43,9 +43,11 @@ class FrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(num_features) - eps)
 
     def forward(self, x):
+        # x.requires_grad 为 True, 表示训练. 为 False, 表示推理.
         if x.requires_grad:
             # When gradients are needed, F.batch_norm will use extra memory
             # because its backward op computes gradients for weight/bias as well.
+            # rsqrt 是求导出 1/sqrt(x)
             scale = self.weight * (self.running_var + self.eps).rsqrt()
             bias = self.bias - self.running_mean * scale
             scale = scale.reshape(1, -1, 1, 1)
@@ -120,6 +122,7 @@ class FrozenBatchNorm2d(nn.Module):
             for name, child in module.named_children():
                 new_child = cls.convert_frozen_batchnorm(child)
                 if new_child is not child:
+                    # add_module 会把原来的替换
                     res.add_module(name, new_child)
         return res
 

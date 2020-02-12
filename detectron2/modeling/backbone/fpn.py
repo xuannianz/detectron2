@@ -50,7 +50,9 @@ class FPN(Backbone):
 
         # Feature map strides and channels from the bottom up network (e.g. ResNet)
         input_shapes = bottom_up.output_shape()
+        # [4, 8, 16, 32]
         in_strides = [input_shapes[f].stride for f in in_features]
+        # [256, 512, 1024, 2048]
         in_channels = [input_shapes[f].channels for f in in_features]
 
         _assert_strides_are_log2_contiguous(in_strides)
@@ -87,17 +89,22 @@ class FPN(Backbone):
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
         self.top_block = top_block
+        # ['res2', 'res3', 'res4', 'res5']
         self.in_features = in_features
         self.bottom_up = bottom_up
-        # Return feature names are "p<stage>", like ["p2", "p3", ..., "p6"]
+        # {'p2':4, 'p3':8, 'p4':16, 'p5':32}
         self._out_feature_strides = {"p{}".format(int(math.log2(s))): s for s in in_strides}
         # top block output feature maps.
+        # 加上 'p6': 64
         if self.top_block is not None:
             for s in range(stage, stage + self.top_block.num_levels):
                 self._out_feature_strides["p{}".format(s + 1)] = 2 ** (s + 1)
 
+        # Return feature names are "p<stage>", like ["p2", "p3", ..., "p6"]
         self._out_features = list(self._out_feature_strides.keys())
+        # {'p2':256, 'p3':256, 'p4':256, 'p5':256}
         self._out_feature_channels = {k: out_channels for k in self._out_features}
+        # 32, unclear: 这个有什么用啊?
         self._size_divisibility = in_strides[-1]
         assert fuse_type in {"avg", "sum"}
         self._fuse_type = fuse_type
@@ -121,10 +128,14 @@ class FPN(Backbone):
         """
         # Reverse feature maps into top-down order (from low to high resolution)
         bottom_up_features = self.bottom_up(x)
+        # [C5, C4, C3, C2]
         x = [bottom_up_features[f] for f in self.in_features[::-1]]
         results = []
+        # P5
         prev_features = self.lateral_convs[0](x[0])
+        # [P5]
         results.append(self.output_convs[0](prev_features))
+        # 循环过后, results 变成 [P2, P3, P4, P5]
         for features, lateral_conv, output_conv in zip(
             x[1:], self.lateral_convs[1:], self.output_convs[1:]
         ):
@@ -139,8 +150,10 @@ class FPN(Backbone):
             top_block_in_feature = bottom_up_features.get(self.top_block.in_feature, None)
             if top_block_in_feature is None:
                 top_block_in_feature = results[self._out_features.index(self.top_block.in_feature)]
+            # results 变成 [P2, P3, P4, P5, P6]
             results.extend(self.top_block(top_block_in_feature))
         assert len(self._out_features) == len(results)
+        # {'p2':P2, 'p3':P3, 'p4':P4, 'p5':P5, 'p6':P6}
         return dict(zip(self._out_features, results))
 
     def output_shape(self):

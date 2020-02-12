@@ -29,7 +29,11 @@ class _ColorfulFormatter(logging.Formatter):
             return log
         return prefix + " " + log
 
-
+# lru_cache() 的作用
+# The lru_cache() decorator wraps a function in a least-recently-used cache.
+# Arguments to the function are used to build a hash key, which is then mapped to the result.
+# Subsequent calls with the same arguments will fetch the value from the cache instead of calling the function.
+# 参数 * 表示后面都是 keyword-only params
 @functools.lru_cache()  # so that calling setup_logger multiple times won't add many handlers
 def setup_logger(
     output=None, distributed_rank=0, *, color=True, name="detectron2", abbrev_name=None
