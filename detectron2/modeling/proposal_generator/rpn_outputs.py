@@ -97,6 +97,7 @@ def find_top_rpn_proposals(
     topk_proposals = []
     level_ids = []  # #lvl Tensor, each of shape (topk,)
     batch_idx = torch.arange(num_images, device=device)
+    # proposals_i: [N, Hi*Wi*A, 4], logits_i: [N, Hi*Wi*A]
     for level_id, proposals_i, logits_i in zip(
         itertools.count(), proposals, pred_objectness_logits
     ):
@@ -117,6 +118,7 @@ def find_top_rpn_proposals(
         level_ids.append(torch.full((num_proposals_i,), level_id, dtype=torch.int64, device=device))
 
     # 2. Concat all levels together
+    # [N, sum(topk)]
     topk_scores = cat(topk_scores, dim=1)
     topk_proposals = cat(topk_proposals, dim=1)
     level_ids = cat(level_ids, dim=0)
@@ -217,6 +219,7 @@ class RPNOutputs(object):
             pred_objectness_logits (list[Tensor]): A list of L elements.
                 Element i is a tensor of shape (N, A, Hi, Wi) representing
                 the predicted objectness logits for anchors.
+                每一个 element 表示在一个 feature map 上的预测
             pred_anchor_deltas (list[Tensor]): A list of L elements. Element i is a tensor of shape
                 (N, A*4, Hi, Wi) representing the predicted "deltas" used to transform anchors
                 to proposals.
@@ -258,6 +261,8 @@ class RPNOutputs(object):
         gt_objectness_logits = []
         gt_anchor_deltas = []
         # Concatenate anchors from all feature maps into a single Boxes per image
+        # anchors_i 是第 i 个 image 上的所有 feature maps 的 anchors, list(Boxes)
+        # 把每个 image 上所有 feature maps 的 anchors 连接起来
         anchors = [Boxes.cat(anchors_i) for anchors_i in self.anchors]
         for image_size_i, anchors_i, gt_boxes_i in zip(self.image_sizes, anchors, self.gt_boxes):
             """
@@ -266,6 +271,7 @@ class RPNOutputs(object):
             gt_boxes_i: ground-truth boxes for i-th image
             """
             match_quality_matrix = retry_if_cuda_oom(pairwise_iou)(gt_boxes_i, anchors_i)
+            # [N, ]
             matched_idxs, gt_objectness_logits_i = retry_if_cuda_oom(self.anchor_matcher)(
                 match_quality_matrix
             )
@@ -285,6 +291,7 @@ class RPNOutputs(object):
             else:
                 # TODO wasted computation for ignored boxes
                 matched_gt_boxes = gt_boxes_i[matched_idxs]
+                # [N, 4]
                 gt_anchor_deltas_i = self.box2box_transform.get_deltas(
                     anchors_i.tensor, matched_gt_boxes.tensor
                 )
@@ -315,6 +322,7 @@ class RPNOutputs(object):
             )
             # Fill with the ignore label (-1), then set positive and negative labels
             label.fill_(-1)
+            # scatter 第一个参数是 dim
             label.scatter_(0, pos_idx, 1)
             label.scatter_(0, neg_idx, 0)
             return label
@@ -327,11 +335,13 @@ class RPNOutputs(object):
             where B is the box dimension
         """
         # Collect all objectness labels and delta targets over feature maps and images
-        # The final ordering is L, N, H, W, A from slowest to fastest axis.
+        # The final ordering is L, N, H, W, A from slowest to fastest axis. unclear: 啥意思?
+        # [] 的元素表示一个 feature map 上 anchors 的个数, A*H*W
         num_anchors_per_map = [np.prod(x.shape[1:]) for x in self.pred_objectness_logits]
+        # 所有 feature map 上的 anchors 的总和
         num_anchors_per_image = sum(num_anchors_per_map)
 
-        # Stack to: (N, num_anchors_per_image)
+        # Stack to: (N, num_anchors_per_image), 这里的 N 表示的是 batch
         gt_objectness_logits = torch.stack(
             [resample(label) for label in gt_objectness_logits], dim=0
         )
@@ -347,6 +357,7 @@ class RPNOutputs(object):
         # Split to tuple of L tensors, each with shape (N, num_anchors_per_map)
         gt_objectness_logits = torch.split(gt_objectness_logits, num_anchors_per_map, dim=1)
         # Concat from all feature maps
+        # [sum(N * num_anchors_per_image), ]
         gt_objectness_logits = cat([x.flatten() for x in gt_objectness_logits], dim=0)
 
         # Stack to: (N, num_anchors_per_image, B)
@@ -354,9 +365,10 @@ class RPNOutputs(object):
         assert gt_anchor_deltas.shape[1] == num_anchors_per_image
         B = gt_anchor_deltas.shape[2]  # box dimension (4 or 5)
 
-        # Split to tuple of L tensors, each with shape (N, num_anchors_per_image)
+        # Split to tuple of L tensors, each with shape (N, num_anchors_per_map, B)
         gt_anchor_deltas = torch.split(gt_anchor_deltas, num_anchors_per_map, dim=1)
         # Concat from all feature maps
+        # [sum(N * num_anchors_per_map), 4]
         gt_anchor_deltas = cat([x.reshape(-1, B) for x in gt_anchor_deltas], dim=0)
 
         # Collect all objectness logits and delta predictions over feature maps
@@ -406,6 +418,7 @@ class RPNOutputs(object):
         """
         proposals = []
         # Transpose anchors from images-by-feature-maps (N, L) to feature-maps-by-images (L, N)
+        # [[box00, box01,...], [box10,box11,...]...] --> [[box00,box10,...],[box01,box11,...]]
         anchors = list(zip(*self.anchors))
         # For each feature map
         for anchors_i, pred_anchor_deltas_i in zip(anchors, self.pred_anchor_deltas):

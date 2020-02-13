@@ -298,26 +298,30 @@ def pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     """
     Given two lists of boxes of size N and M,
     compute the IoU (intersection over union)
-    between __all__ N x M pairs of boxes.
+    between __all__ M x N pairs of boxes.
     The box order must be (xmin, ymin, xmax, ymax).
 
     Args:
         boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
 
     Returns:
-        Tensor: IoU, sized [N,M].
+        Tensor: IoU, sized [M,N].
     """
+    # (M, )
     area1 = boxes1.area()
+    # (N, )
     area2 = boxes2.area()
 
     boxes1, boxes2 = boxes1.tensor, boxes2.tensor
 
+    # 计算重叠部分的宽高
     width_height = torch.min(boxes1[:, None, 2:], boxes2[:, 2:]) - torch.max(
         boxes1[:, None, :2], boxes2[:, :2]
-    )  # [N,M,2]
+    )  # [M,N,2]
 
-    width_height.clamp_(min=0)  # [N,M,2]
-    inter = width_height.prod(dim=2)  # [N,M]
+    width_height.clamp_(min=0)  # [M,N,2]
+    # 重叠部分的面积
+    inter = width_height.prod(dim=2)  # [M,N]
     del width_height
 
     # handle empty boxes

@@ -55,6 +55,7 @@ class ImageList(object):
             tensors: a tuple or list of `torch.Tensors`, each of shape (Hi, Wi) or
                 (C_1, ..., C_K, Hi, Wi) where K >= 1. The Tensors will be padded with `pad_value`
                 so that they will have the same shape.
+                unclear: C_1, ..., C_K 是什么鬼?
             size_divisibility (int): If `size_divisibility > 0`, also adds padding to ensure
                 the common height and width is divisible by `size_divisibility`
             pad_value (float): value to pad
@@ -66,6 +67,7 @@ class ImageList(object):
         assert isinstance(tensors, (tuple, list))
         for t in tensors:
             assert isinstance(t, torch.Tensor), type(t)
+            # unclear: 这是干啥?
             assert t.shape[1:-2] == tensors[0].shape[1:-2], t.shape
         # per dimension maximum (H, W) or (C_1, ..., C_K, H, W) where K >= 1 among all tensors
         max_size = tuple(max(s) for s in zip(*[img.shape for img in tensors]))
@@ -75,7 +77,9 @@ class ImageList(object):
 
             stride = size_divisibility
             max_size = list(max_size)  # type: ignore
+            # MAX_HEIGHT
             max_size[-2] = int(math.ceil(max_size[-2] / stride) * stride)  # type: ignore
+            # MAX_WIDTH
             max_size[-1] = int(math.ceil(max_size[-1] / stride) * stride)  # type: ignore
             max_size = tuple(max_size)
 
@@ -89,6 +93,8 @@ class ImageList(object):
             if all(x == 0 for x in padding_size):  # https://github.com/pytorch/pytorch/issues/31734
                 batched_imgs = tensors[0].unsqueeze(0)
             else:
+                # [0, max_size[-1] - image_size[1]] pad 到 W 那一维的两侧
+                # [0, max_size[-2] - image_size[0]] pad 到 H 那一维的两侧
                 padded = F.pad(tensors[0], padding_size, value=pad_value)
                 batched_imgs = padded.unsqueeze_(0)
         else:

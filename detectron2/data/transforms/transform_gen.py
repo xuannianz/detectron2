@@ -187,6 +187,7 @@ class ResizeShortestEdge(TransformGen):
         self.is_range = sample_style == "range"
         if isinstance(short_edge_length, int):
             short_edge_length = (short_edge_length, short_edge_length)
+        # locals() 返回 [short_edge_length, max_size, sample_style, interp, self, __class__,]
         self._init(locals())
 
     def get_transform(self, img):

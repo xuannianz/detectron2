@@ -139,7 +139,7 @@ class DefaultAnchorGenerator(nn.Module):
             shift_x, shift_y = _create_grid_offsets(size, stride, self.offset, base_anchors.device)
             shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1)
             # (grid_height * grid_width, 1, 4) + (1, len(aspect_ratios), 4)
-            # --> (grid_height * grid_width * len(aspect_ratios, 4)
+            # --> (grid_height * grid_width * len(aspect_ratios), 4)
             anchors.append((shifts.view(-1, 1, 4) + base_anchors.view(1, -1, 4)).reshape(-1, 4))
         # [(grid_height * grid_width) * len(aspect_ratios), 4), ... ,]
         return anchors

@@ -73,7 +73,7 @@ class Matcher(object):
             )
             # When no gt boxes exist, we define IOU = 0 and therefore set labels
             # to `self.labels[0]`, which usually defaults to background class 0
-            # To choose to ignore instead, can make labels=[-1,0,-1,1] + set appropriate thresholds
+            # To choose to ignore instead, can make labels=[-1,0,-1,1] + set appropriate thresholds unclear: 什么意思?
             default_match_labels = match_quality_matrix.new_full(
                 (match_quality_matrix.size(1),), self.labels[0], dtype=torch.int8
             )
@@ -83,10 +83,11 @@ class Matcher(object):
 
         # match_quality_matrix is M (gt) x N (predicted)
         # Max over gt elements (dim 0) to find best gt candidate for each prediction
+        # [N, ] 每个 prediction 和所有 gt 的最大 iou, matches 表示和哪个 gt 有最大 iou
         matched_vals, matches = match_quality_matrix.max(dim=0)
 
         match_labels = matches.new_full(matches.size(), 1, dtype=torch.int8)
-
+        # 根据最大 iou, 设置该 prediction 是 positive, ignore, negative
         for (l, low, high) in zip(self.labels, self.thresholds[:-1], self.thresholds[1:]):
             low_high = (matched_vals >= low) & (matched_vals < high)
             match_labels[low_high] = l
@@ -107,10 +108,11 @@ class Matcher(object):
         Faster R-CNN paper: https://arxiv.org/pdf/1506.01497v3.pdf.
         """
         # For each gt, find the prediction with which it has highest quality
+        # [M,] 每个 gt 和所有 prediction 的最大 iou
         highest_quality_foreach_gt, _ = match_quality_matrix.max(dim=1)
         # Find the highest quality match available, even if it is low, including ties.
-        # Note that the matches qualities must be positive due to the use of
-        # `torch.nonzero`.
+        # Note that the matches qualities must be positive due to the use of `torch.nonzero`.
+        # 找出这些 prediction 的位置, 注意一个 gt 可能和多个 prediction 的 iou 相等
         gt_pred_pairs_of_highest_quality = torch.nonzero(
             match_quality_matrix == highest_quality_foreach_gt[:, None]
         )
@@ -129,4 +131,5 @@ class Matcher(object):
         # Note how gt items 1, 2, 3, and 5 each have two ties
 
         pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
+        # 设置这些 prediction 为 positive, 不管它和所有 gt 的最大 iou 是多少, 期望这个 prediction 来回归对应的 gt
         match_labels[pred_inds_to_update] = 1

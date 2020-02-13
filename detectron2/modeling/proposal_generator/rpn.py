@@ -122,6 +122,7 @@ class RPN(nn.Module):
         self.anchor_matcher = Matcher(
             cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, allow_low_quality_matches=True
         )
+        # input_shape: ['p2': ShapeSpec(channels=256, None, None, 4), ..., ]
         self.rpn_head = build_rpn_head(cfg, [input_shape[f] for f in self.in_features])
 
     def forward(self, images, features, gt_instances=None):

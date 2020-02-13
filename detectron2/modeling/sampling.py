@@ -12,6 +12,8 @@ def subsample_labels(labels, num_samples, positive_fraction, bg_label):
     exceeding `positive_fraction * num_samples`, and then try to
     fill the remaining slots with negatives.
 
+    提取 num_samples * positive_faction 个正样本, 如果不足, 有多少提多少, 设为 num_pos, 返回它们的 id
+    提取 num_samples - num_pos 个负样本, 如果不足, 有多少提多少, 设为 num_neg, 返回它们的 id
     Args:
         labels (Tensor): (N, ) label vector with values:
             * -1: ignore
