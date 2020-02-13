@@ -173,9 +173,11 @@ class ROIHeads(torch.nn.Module):
 
         Returns:
             Tensor: a vector of indices of sampled proposals. Each is in [0, N).
+                   表示返回 proposals 在 predictions 中的 idx
             Tensor: a vector of the same length, the classification label for
                 each sampled proposal. Each sample is labeled as either a category in
                 [0, num_classes) or the background (num_classes).
+                   表示 proposals 的 class_id, bg proposal 的 class_id 为 num_classes
         """
         has_gt = gt_classes.numel() > 0
         # Get the corresponding GT for each proposal
@@ -183,7 +185,7 @@ class ROIHeads(torch.nn.Module):
             gt_classes = gt_classes[matched_idxs]
             # Label unmatched proposals (0 label from matcher) as background (label=num_classes)
             gt_classes[matched_labels == 0] = self.num_classes
-            # Label ignore proposals (-1 label)
+            # Label ignore proposals (-1 label) unclear: 这个没有 -1 吧, 要么是 fg 要么是 bg
             gt_classes[matched_labels == -1] = -1
         else:
             gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
@@ -235,17 +237,19 @@ class ROIHeads(torch.nn.Module):
         # convergence and empirically improves box AP on COCO by about 0.5
         # points (under one tested configuration).
         if self.proposal_append_gt:
+            # gt_boxes: List[Boxes], proposals: List[Instances]
             proposals = add_ground_truth_to_proposals(gt_boxes, proposals)
 
         proposals_with_gt = []
-
         num_fg_samples = []
         num_bg_samples = []
+
         for proposals_per_image, targets_per_image in zip(proposals, targets):
             has_gt = len(targets_per_image) > 0
             match_quality_matrix = pairwise_iou(
                 targets_per_image.gt_boxes, proposals_per_image.proposal_boxes
             )
+            # matched_idxs 表示每一个 prediction match 的 gt 的 id
             matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
             sampled_idxs, gt_classes = self._sample_proposals(
                 matched_idxs, matched_labels, targets_per_image.gt_classes
@@ -513,6 +517,7 @@ class StandardROIHeads(ROIHeads):
             cfg, ShapeSpec(channels=in_channels, height=pooler_resolution, width=pooler_resolution)
         )
         self.box_predictor = FastRCNNOutputLayers(
+            # box_head.output_size=fc_dim
             self.box_head.output_size, self.num_classes, self.cls_agnostic_bbox_reg
         )
 
@@ -643,7 +648,9 @@ class StandardROIHeads(ROIHeads):
             In training, a dict of losses.
             In inference, a list of `Instances`, the predicted instances.
         """
+        # (M, C, pool_size, pool_size), M 表示所有 image 上的 roi 的总和
         box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
+        # (M, fc_dim)
         box_features = self.box_head(box_features)
         pred_class_logits, pred_proposal_deltas = self.box_predictor(box_features)
         del box_features
@@ -658,6 +665,7 @@ class StandardROIHeads(ROIHeads):
         if self.training:
             if self.train_on_pred_boxes:
                 with torch.no_grad():
+                    # unclear: 计算每个 image 上预测的 boxes, 这有什么用啊?
                     pred_boxes = outputs.predict_boxes_for_gt_classes()
                     for proposals_per_image, pred_boxes_per_image in zip(proposals, pred_boxes):
                         proposals_per_image.proposal_boxes = Boxes(pred_boxes_per_image)

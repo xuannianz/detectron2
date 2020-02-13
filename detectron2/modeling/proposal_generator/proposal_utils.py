@@ -22,7 +22,7 @@ def add_ground_truth_to_proposals(gt_boxes, proposals):
     assert gt_boxes is not None
 
     assert len(proposals) == len(gt_boxes)
-    if len(proposals) == 0:
+    if len(proposals) == 0:  # unclear: 怎么会有这种情况?
         return proposals
 
     return [
@@ -45,6 +45,7 @@ def add_ground_truth_to_proposals_single_image(gt_boxes, proposals):
     device = proposals.objectness_logits.device
     # Concatenating gt_boxes with proposals requires them to have the same fields
     # Assign all ground-truth boxes an objectness logit corresponding to P(object) \approx 1.
+    # unclear: 为什么是这个值啊? 23.02
     gt_logit_value = math.log((1.0 - 1e-10) / (1 - (1.0 - 1e-10)))
 
     gt_logits = gt_logit_value * torch.ones(len(gt_boxes), device=device)

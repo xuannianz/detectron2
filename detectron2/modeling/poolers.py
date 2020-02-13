@@ -22,8 +22,9 @@ def assign_boxes_to_levels(box_lists, min_level, max_level, canonical_box_size, 
             the output of stage 1 is index 1, and so.
         max_level (int): Largest feature map level index.
         canonical_box_size (int): A canonical box size in pixels (sqrt(box area)).
+                                  paper 中使用的是 224.
         canonical_level (int): The feature map level index on which a canonically-sized box
-            should be placed.
+            should be placed. papey 中设置的是 4.
 
     Returns:
         A tensor of length M, where M is the total number of boxes aggregated over all
@@ -49,6 +50,7 @@ def convert_boxes_to_pooler_format(box_lists):
     Convert all boxes in `box_lists` to the low-level format used by ROI pooling ops
     (see description under Returns).
 
+    把 box_lists 的 Boxes 整合在一起, 就是把所有 image 的 Boxes 整合起来
     Args:
         box_lists (list[Boxes] | list[RotatedBoxes]):
             A list of N Boxes or N RotatedBoxes, where N is the number of images in the batch.
@@ -209,17 +211,20 @@ class ROIPooler(nn.Module):
             x[0].size(0), len(box_lists)
         )
 
+        # (M, 5) M 表示所有 image 上的 proposal_boxes 的总和
         pooler_fmt_boxes = convert_boxes_to_pooler_format(box_lists)
 
         if num_level_assignments == 1:
             return self.level_poolers[0](x[0], pooler_fmt_boxes)
 
+        # (M, ) 每个 proposal_box 所属的 level, 即对应哪个 feature map
         level_assignments = assign_boxes_to_levels(
             box_lists, self.min_level, self.max_level, self.canonical_box_size, self.canonical_level
         )
 
         num_boxes = len(pooler_fmt_boxes)
         num_channels = x[0].shape[1]
+        # box 分支是 7, mask 分支是 14
         output_size = self.output_size[0]
 
         dtype, device = x[0].dtype, x[0].device
@@ -228,7 +233,9 @@ class ROIPooler(nn.Module):
         )
 
         for level, (x_level, pooler) in enumerate(zip(x, self.level_poolers)):
+            # nonzero 始终返回二维数据, 即便其参数只有一维. 表示当前 level 的所有 box 的 id
             inds = torch.nonzero(level_assignments == level).squeeze(1)
+            # 当前 level 的所有 box
             pooler_fmt_boxes_level = pooler_fmt_boxes[inds]
             output[inds] = pooler(x_level, pooler_fmt_boxes_level)
 

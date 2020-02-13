@@ -237,6 +237,7 @@ class FastRCNNOutputs(object):
             # where b is the dimension of box representation (4 or 5)
             # Note that compared to Detectron1,
             # we do not perform bounding box regression for background classes.
+            # [PR, 4] PR 表示 fg boxes 的个数, 4 表示每一个 fg boxes 对应与 prediction deltas 的下标
             gt_class_cols = box_dim * fg_gt_classes[:, None] + torch.arange(box_dim, device=device)
 
         loss_box_reg = smooth_l1_loss(
@@ -255,7 +256,7 @@ class FastRCNNOutputs(object):
         # minibatch (1) will be given 100 times as much influence as each foreground
         # example in minibatch (2). Normalizing by the total number of regions, R,
         # means that the single example in minibatch (1) and each of the 100 examples
-        # in minibatch (2) are given equal influence.
+        # in minibatch (2) are given equal influence. unclear: 啥意思啊?
         loss_box_reg = loss_box_reg / self.gt_classes.numel()
         return loss_box_reg
 
@@ -371,6 +372,7 @@ class FastRCNNOutputLayers(nn.Module):
         # The prediction layer for num_classes foreground classes and one background class
         # (hence + 1)
         self.cls_score = nn.Linear(input_size, num_classes + 1)
+        # unclear: class agnostic 到底是什么?
         num_bbox_reg_classes = 1 if cls_agnostic_bbox_reg else num_classes
         self.bbox_pred = nn.Linear(input_size, num_bbox_reg_classes * box_dim)
 
