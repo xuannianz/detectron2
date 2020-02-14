@@ -170,6 +170,7 @@ class GeneralizedRCNN(nn.Module):
             results, _ = self.roi_heads(images, features, proposals, None)
         else:
             detected_instances = [x.to(self.device) for x in detected_instances]
+            # list[Instances]
             results = self.roi_heads.forward_with_given_boxes(features, detected_instances)
 
         if do_postprocess:
@@ -193,6 +194,7 @@ class GeneralizedRCNN(nn.Module):
         """
         # note: private function; subject to changes
         processed_results = []
+        # input_per_image 是原始图片的信息, image_size 是 preprocess 过的图片大小
         for results_per_image, input_per_image, image_size in zip(
             instances, batched_inputs, image_sizes
         ):

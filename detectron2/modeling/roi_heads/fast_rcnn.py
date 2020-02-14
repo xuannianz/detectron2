@@ -87,6 +87,7 @@ def fast_rcnn_inference_single_image(
     Returns:
         Same as `fast_rcnn_inference`, but for only one image.
     """
+    # isfinite 返回每个值是否是 finite 的 bool 值, inf,nan,-inf 都返回 False
     valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
     if not valid_mask.all():
         boxes = boxes[valid_mask]
@@ -111,6 +112,7 @@ def fast_rcnn_inference_single_image(
     scores = scores[filter_mask]
 
     # Apply per-class NMS
+    # 第三个参数表示 class_ids
     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]

@@ -16,7 +16,7 @@ GPU_MEM_LIMIT = 1024 ** 3  # 1 GB memory limit
 def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
     """
     Args:
-        masks: N, 1, H, W
+        masks: N, 1, Hmask, Wmask
         boxes: N, 4
         img_h, img_w (int):
         skip_empty (bool): only paste masks within the region that
@@ -34,6 +34,7 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
     # this has more operations but is faster on COCO-scale dataset.
     device = masks.device
     if skip_empty:
+        # 取正好包围所有 boxes 的最小 region, 而不是整个 image
         x0_int, y0_int = torch.clamp(boxes.min(dim=0).values.floor()[:2] - 1, min=0).to(
             dtype=torch.int32
         )
@@ -46,16 +47,23 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
 
     N = masks.shape[0]
 
+    # 为什么要加 0.5?
     img_y = torch.arange(y0_int, y1_int, device=device, dtype=torch.float32) + 0.5
     img_x = torch.arange(x0_int, x1_int, device=device, dtype=torch.float32) + 0.5
+    # 确保 boxes 范围内的像素的坐标变成 (-1, 1), 用于 grid_sample
     img_y = (img_y - y0) / (y1 - y0) * 2 - 1
     img_x = (img_x - x0) / (x1 - x0) * 2 - 1
     # img_x, img_y have shapes (N, w), (N, h)
 
     gx = img_x[:, None, :].expand(N, img_y.size(1), img_x.size(1))
     gy = img_y[:, :, None].expand(N, img_y.size(1), img_x.size(1))
+    # (N, h, w, 2)
     grid = torch.stack([gx, gy], dim=3)
 
+    # img_masks 的 shape 为 (N, 1, h, w)
+    # img_masks 的 [n, :, i, j] 对应 masks 中的像素的坐标为 grid[n, i, j], grid 的值的范围为 (-1, 1)
+    # 如果 grid 的值不在 (-1, 1) 范围内, 用其他值来填充, 用什么值填充取决于 grid_sample 的 padding 参数, 默认用 0 填充
+    # https://pytorch.org/docs/stable/nn.functional.html?highlight=grid_sample#torch.nn.functional.grid_sample
     img_masks = F.grid_sample(masks.to(dtype=torch.float32), grid, align_corners=False)
 
     if skip_empty:
@@ -71,10 +79,10 @@ def paste_masks_in_image(masks, boxes, image_shape, threshold=0.5):
     corresponding bounding boxes in boxes.
 
     Args:
-        masks (tensor): Tensor of shape (Bimg, Hmask, Wmask), where Bimg is the number of
+        masks (tensor): Tensor of shape (Ri, Hmask, Wmask), where Ri is the number of
             detected object instances in the image and Hmask, Wmask are the mask width and mask
             height of the predicted mask (e.g., Hmask = Wmask = 28). Values are in [0, 1].
-        boxes (Boxes or Tensor): A Boxes of length Bimg or Tensor of shape (Bimg, 4).
+        boxes (Boxes or Tensor): A Boxes of length Ri or Tensor of shape (Ri, 4).
             boxes[i] and masks[i] correspond to the same object instance.
         image_shape (tuple): height, width
         threshold (float): A threshold in [0, 1] for converting the (soft) masks to
@@ -94,6 +102,7 @@ def paste_masks_in_image(masks, boxes, image_shape, threshold=0.5):
     device = boxes.device
     assert len(boxes) == N, boxes.shape
 
+    # 原始 image 的宽高
     img_h, img_w = image_shape
 
     # The actual implementation split the input into chunks,

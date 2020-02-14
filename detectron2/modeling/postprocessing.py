@@ -35,9 +35,11 @@ def detector_postprocess(results, output_height, output_width, mask_threshold=0.
     output_boxes.scale(scale_x, scale_y)
     output_boxes.clip(results.image_size)
 
+    # nonempty() 获得面积为 0 或者小于 threshold 的 boxes 的 id
     results = results[output_boxes.nonempty()]
 
     if results.has("pred_masks"):
+        # (N, output_height, output_width)
         results.pred_masks = paste_masks_in_image(
             results.pred_masks[:, 0, :, :],  # N, 1, M, M
             results.pred_boxes,

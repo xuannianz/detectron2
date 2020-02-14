@@ -22,8 +22,8 @@ def mask_rcnn_loss(pred_mask_logits, instances):
     Compute the mask prediction loss defined in the Mask R-CNN paper.
 
     Args:
-        pred_mask_logits (Tensor): A tensor of shape (B, C, Hmask, Wmask) or (B, 1, Hmask, Wmask)
-            for class-specific or class-agnostic, where B is the total number of predicted masks
+        pred_mask_logits (Tensor): A tensor of shape (R, C, Hmask, Wmask) or (R, 1, Hmask, Wmask)
+            for class-specific or class-agnostic, where R is the total number of predicted masks
             in all images, C is the number of foreground classes, and Hmask, Wmask are the height
             and width of the mask predictions. The values are logits.
         instances (list[Instances]): A list of N Instances, where N is the number of images
@@ -57,6 +57,7 @@ def mask_rcnn_loss(pred_mask_logits, instances):
     if len(gt_masks) == 0:
         return pred_mask_logits.sum() * 0
 
+    # (R, 28, 28)
     gt_masks = cat(gt_masks, dim=0)
 
     if cls_agnostic_mask:
@@ -64,6 +65,7 @@ def mask_rcnn_loss(pred_mask_logits, instances):
     else:
         indices = torch.arange(total_num_masks)
         gt_classes = cat(gt_classes, dim=0)
+        # (R, 28, 28)
         pred_mask_logits = pred_mask_logits[indices, gt_classes]
 
     if gt_masks.dtype == torch.bool:
@@ -73,6 +75,7 @@ def mask_rcnn_loss(pred_mask_logits, instances):
         gt_masks_bool = gt_masks > 0.5
 
     # Log the training accuracy (using gt classes and 0.5 threshold)
+    # 0.0 相当于 sigmoid 的 0.5
     mask_incorrect = (pred_mask_logits > 0.0) != gt_masks_bool
     mask_accuracy = 1 - (mask_incorrect.sum().item() / max(mask_incorrect.numel(), 1.0))
     num_positive = gt_masks_bool.sum().item()
@@ -86,6 +89,7 @@ def mask_rcnn_loss(pred_mask_logits, instances):
     storage.put_scalar("mask_rcnn/false_positive", false_positive)
     storage.put_scalar("mask_rcnn/false_negative", false_negative)
 
+    # F.binary_cross_entropy_with_logits 自带 sigmoid
     mask_loss = F.binary_cross_entropy_with_logits(
         pred_mask_logits, gt_masks.to(dtype=torch.float32), reduction="mean"
     )
@@ -100,8 +104,8 @@ def mask_rcnn_inference(pred_mask_logits, pred_instances):
     new "pred_masks" field to pred_instances.
 
     Args:
-        pred_mask_logits (Tensor): A tensor of shape (B, C, Hmask, Wmask) or (B, 1, Hmask, Wmask)
-            for class-specific or class-agnostic, where B is the total number of predicted masks
+        pred_mask_logits (Tensor): A tensor of shape (R, C, Hmask, Wmask) or (R, 1, Hmask, Wmask)
+            for class-specific or class-agnostic, where R is the total number of predicted masks
             in all images, C is the number of foreground classes, and Hmask, Wmask are the height
             and width of the mask predictions. The values are logits.
         pred_instances (list[Instances]): A list of N Instances, where N is the number of images
@@ -124,13 +128,13 @@ def mask_rcnn_inference(pred_mask_logits, pred_instances):
         class_pred = cat([i.pred_classes for i in pred_instances])
         indices = torch.arange(num_masks, device=class_pred.device)
         mask_probs_pred = pred_mask_logits[indices, class_pred][:, None].sigmoid()
-    # mask_probs_pred.shape: (B, 1, Hmask, Wmask)
+    # mask_probs_pred.shape: (R, 1, Hmask, Wmask)
 
     num_boxes_per_image = [len(i) for i in pred_instances]
     mask_probs_pred = mask_probs_pred.split(num_boxes_per_image, dim=0)
 
     for prob, instances in zip(mask_probs_pred, pred_instances):
-        instances.pred_masks = prob  # (1, Hmask, Wmask)
+        instances.pred_masks = prob  # (N, 1, Hmask, Wmask), N 表示当前 image 上的 mask 的个数
 
 
 @ROI_MASK_HEAD_REGISTRY.register()

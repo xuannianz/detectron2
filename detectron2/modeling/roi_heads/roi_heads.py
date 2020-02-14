@@ -596,6 +596,7 @@ class StandardROIHeads(ROIHeads):
             losses.update(self._forward_keypoint(features_list, proposals))
             return proposals, losses
         else:
+            # 经过 score_threshold, nms 过滤
             pred_instances = self._forward_box(features_list, proposals)
             # During inference cascaded prediction is used: the mask and keypoints heads are only
             # applied to the top scoring box detections.
@@ -699,7 +700,9 @@ class StandardROIHeads(ROIHeads):
             # The loss is only defined on positive proposals.
             proposals, _ = select_foreground_proposals(instances, self.num_classes)
             proposal_boxes = [x.proposal_boxes for x in proposals]
+            # (M, C, 14, 14)
             mask_features = self.mask_pooler(features, proposal_boxes)
+            # (M, num_classes, 28, 28)
             mask_logits = self.mask_head(mask_features)
             return {"loss_mask": mask_rcnn_loss(mask_logits, proposals)}
         else:
